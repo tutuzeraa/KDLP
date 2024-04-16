@@ -1,4 +1,5 @@
 #include<stdio.h>
+#include<string.h>
 #include<unistd.h>
 #include<errno.h>
 
@@ -15,6 +16,10 @@ int main(int argc, char **argv)
 		printf("%s$ \n", cur_dir);
 
 		if (fgets(user_input, BUF_SIZE, stdin) == NULL) break;
+
+		if (!strcmp(user_input, "\n")) continue;
+		
+		printf("Unrecognized command\n");
 	}
 
 	return 0;
