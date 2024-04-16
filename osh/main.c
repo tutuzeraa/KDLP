@@ -7,9 +7,15 @@ int BUF_SIZE = 256;
 int main(int argc, char **argv)
 {
 	char buf[BUF_SIZE];
-	char *cur_dir = getcwd(buf, BUF_SIZE);
-	
-	printf("%s$ \n", cur_dir);
+	char user_input[BUF_SIZE];
+	char *cur_dir;	
+
+	while (1) {
+		cur_dir = getcwd(buf, BUF_SIZE);
+		printf("%s$ \n", cur_dir);
+
+		if (fgets(user_input, BUF_SIZE, stdin) == NULL) break;
+	}
 
 	return 0;
 }	
