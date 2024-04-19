@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #define BUF_SIZE 256
 const int num_builtins = 3;
@@ -122,6 +123,46 @@ int osh_exec_child(char **cmd){
 	return 1;
 }
 
+int searchCmd(char **cmd){
+
+  // get list of enviroments
+  char *env_list = getenv("PATH");
+  
+  char **envs = malloc(BUF_SIZE * sizeof(char*));
+  char *token;
+  
+  int i = 0;
+  token = strtok(env_list, ":");
+  while(token != NULL){
+    
+    printf("a");
+    envs[i] = token; 
+    printf("b");
+    printf("env %d is %s\n", i, envs[i]);
+    printf("c");
+    token = strtok(NULL, ":");
+    printf("d\n");
+    i++;
+  }
+    printf("cu");
+  
+  int num_envs = i;
+  // search for file cmd[0] in envs
+  for(int i = 0; i < num_envs; i++){
+    printf("searching in env %d %s", i, envs[i]);
+    struct stat sb;
+    char *file = "";
+    strcat(file, envs[i]); strcat(file, cmd[0]);
+    if (stat(file, &sb) == -1)
+      continue;
+    printf("achou\n");
+    cmd[0] = file;
+    osh_exec_child(cmd);
+  }
+
+  return 1;
+}
+
 int execute(char **cmd) {
   for (int i = 0; i < num_builtins; i++) {
     // printf("cmd %s, builtin %s\n", cmd[0], builtin_cmd[i]);
@@ -129,7 +170,10 @@ int execute(char **cmd) {
       return (*builtin_func[i])(cmd);
     } else if (cmd[0][0] == '/'|| cmd[0][0] == '.') {
 		return osh_exec_child(cmd);
-	}
+	  } else{
+      return searchCmd(cmd);
+    }
+
   }
 
   printf("Unrecognized command %s\n", cmd[0]);
