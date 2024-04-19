@@ -80,14 +80,15 @@ int osh_exec(char** args)
         return 1;
     }
 
+	// get exec args
     int i = 0;
     char** exec_args = malloc(BUF_SIZE * sizeof(char*));
     while (args[i + 2] != NULL) {
         exec_args[i] = strndup(args[2 + i], BUF_SIZE);
-        // printf("arg %d: %s\n", i, exec_args[i]);
         i++;
     }
 
+	// execute exec
     if (execv(args[1], exec_args) != 0)
         perror("exec didn`t work!\n");
 
@@ -97,39 +98,42 @@ int osh_exec(char** args)
 
 int osh_exec_child(char** cmd)
 {
-    pid_t pid;
-    int status;
+	pid_t pid;
+	int status;
 
-    // get the args from the command for execvp
-    int i = 0;
-    char** exec_args = malloc(BUF_SIZE * sizeof(char*));
-    while (cmd[i + 1] != NULL) {
-        exec_args[i] = strndup(cmd[i + 1], BUF_SIZE);
-        i++;
-    }
+	// get the args from the cmd for execvp
+	int i = 0;
+	char** exec_args = malloc(BUF_SIZE * sizeof(char*));
+	while (cmd[i + 1] != NULL) {
+		exec_args[i] = strndup(cmd[i + 1], BUF_SIZE);
+		i++;
+	}
+	exec_args[i] = NULL; 
 
-    pid = fork();
-    if (pid == 0) {
-        if (execvp(cmd[0], exec_args) == -1) {
-            perror("can`t execute the command\n");
-        }
-        exit(EXIT_FAILURE);
-    } else if (pid < 0) {
-        perror("an error ocorred when creating the child process\n");
-    } else {
-        do {
-            waitpid(pid, &status, WUNTRACED);
-        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
-    }
+	// create a child process and execute the command
+	pid = fork();
+	if (pid == 0) {
+		if (execvp(cmd[0], exec_args) == -1) { 
+			perror("can't execute the command\n");
+		}
+		exit(EXIT_FAILURE);
+	} else if (pid < 0) {
+		perror("an error occurred when creating the child process\n");
+	} else {
+		do {
+			waitpid(pid, &status, WUNTRACED);
+		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	}
 
-    free(exec_args);
-    return 1;
+	free(exec_args);
+	return 1;
 }
 
 int searchCmd(char** cmd)
 {
     // get list of enviroments
-    char* env_list = getenv("PATH");
+    char* env_list_original = getenv("PATH");
+	char* env_list = strndup(env_list_original, BUF_SIZE);
 
     char** envs = malloc(BUF_SIZE * sizeof(char*));
     char* token;
@@ -144,19 +148,19 @@ int searchCmd(char** cmd)
 
     // search for file cmd[0] in envs
     int num_envs = i;
+	struct stat sb;
     for (int i = 0; i < num_envs - 1; i++) {
-        struct stat sb;
         char file[BUF_SIZE] = "";
         strcat(file, envs[i]);
         strcat(file, "/");
         strcat(file, cmd[0]);
         if (stat(file, &sb) == 0) {
-            cmd[0] = file;
             return osh_exec_child(cmd);
         }
     }
 
     printf("Unrecognized command %s\n", cmd[0]);
+	free(env_list);
     free(envs);
     return 1;
 }
