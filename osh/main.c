@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,40 @@ int (*builtin_func[])(char**) = {
     &osh_exit,
 };
 
+char** tildeExpansion(char** cmd)
+{
+    char* home = getenv("HOME");
+    char* user = getenv("USER");
+    char* user_home = malloc(BUF_SIZE * sizeof(char));
+    strcpy(user_home, "/home/");
+    strcat(user_home, user);
+
+    for (int i = 0; i < BUF_SIZE; i++) {
+        if (cmd[i] == NULL) {
+            break;
+        } else if (cmd[i][0] == '~') {
+            if (cmd[i][1] == '\0') {
+                cmd[i] = user_home;
+            } else {
+                char* username = &cmd[i][1];
+                char* new_cmd = malloc(BUF_SIZE * sizeof(char));
+                struct passwd* pw = getpwnam(username);
+                if (pw != NULL) {
+                    strcpy(new_cmd, pw->pw_dir);
+                    strcat(new_cmd, &cmd[i][strlen(username) + 1]);
+                    cmd[i] = new_cmd;
+                } else {
+                    strcpy(new_cmd, home);
+                    strcat(new_cmd, &cmd[i][1]);
+                    cmd[i] = new_cmd;
+                }
+            }
+        }
+    }
+
+    return cmd;
+}
+
 char** splitCmd(char* user_input)
 {
     int j = 0;
@@ -47,6 +82,8 @@ char** splitCmd(char* user_input)
             strncat(word, c, 1);
         }
     }
+
+    cmd = tildeExpansion(cmd);
 
     return cmd;
 }
@@ -80,7 +117,7 @@ int osh_exec(char** args)
         return 1;
     }
 
-	// get exec args
+    // get exec args
     int i = 0;
     char** exec_args = malloc(BUF_SIZE * sizeof(char*));
     while (args[i + 2] != NULL) {
@@ -88,7 +125,7 @@ int osh_exec(char** args)
         i++;
     }
 
-	// execute exec
+    // execute exec
     if (execv(args[1], exec_args) != 0)
         perror("exec didn`t work!\n");
 
@@ -98,42 +135,32 @@ int osh_exec(char** args)
 
 int osh_exec_child(char** cmd)
 {
-	pid_t pid;
-	int status;
+    pid_t pid;
+    int status;
 
-	// get the args from the cmd for execvp
-	int i = 0;
-	char** exec_args = malloc(BUF_SIZE * sizeof(char*));
-	while (cmd[i + 1] != NULL) {
-		exec_args[i] = strndup(cmd[i + 1], BUF_SIZE);
-		i++;
-	}
-	exec_args[i] = NULL; 
+    // create a child process and execute the command
+    pid = fork();
+    if (pid == 0) {
+        if (execvp(cmd[0], cmd) == -1) {
+            perror("can't execute the command\n");
+        }
+        exit(EXIT_FAILURE);
+    } else if (pid < 0) {
+        perror("an error occurred when creating the child process\n");
+    } else {
+        do {
+            waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
 
-	// create a child process and execute the command
-	pid = fork();
-	if (pid == 0) {
-		if (execvp(cmd[0], exec_args) == -1) { 
-			perror("can't execute the command\n");
-		}
-		exit(EXIT_FAILURE);
-	} else if (pid < 0) {
-		perror("an error occurred when creating the child process\n");
-	} else {
-		do {
-			waitpid(pid, &status, WUNTRACED);
-		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
-	}
-
-	free(exec_args);
-	return 1;
+    return 1;
 }
 
 int searchCmd(char** cmd)
 {
     // get list of enviroments
     char* env_list_original = getenv("PATH");
-	char* env_list = strndup(env_list_original, BUF_SIZE);
+    char* env_list = strndup(env_list_original, BUF_SIZE);
 
     char** envs = malloc(BUF_SIZE * sizeof(char*));
     char* token;
@@ -148,7 +175,7 @@ int searchCmd(char** cmd)
 
     // search for file cmd[0] in envs
     int num_envs = i;
-	struct stat sb;
+    struct stat sb;
     for (int i = 0; i < num_envs - 1; i++) {
         char file[BUF_SIZE] = "";
         strcat(file, envs[i]);
@@ -160,7 +187,7 @@ int searchCmd(char** cmd)
     }
 
     printf("Unrecognized command %s\n", cmd[0]);
-	free(env_list);
+    free(env_list);
     free(envs);
     return 1;
 }
