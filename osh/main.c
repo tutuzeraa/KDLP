@@ -28,38 +28,34 @@ int (*builtin_func[])(char**) = {
     &osh_exit,
 };
 
-char** tildeExpansion(char** cmd)
-{
-    char* home = getenv("HOME");
-    char* user = getenv("USER");
-    char* user_home = malloc(BUF_SIZE * sizeof(char));
-    strcpy(user_home, "/home/");
-    strcat(user_home, user);
+#include <pwd.h>
 
-    for (int i = 0; i < BUF_SIZE; i++) {
-        if (cmd[i] == NULL) {
-            break;
-        } else if (cmd[i][0] == '~') {
-            if (cmd[i][1] == '\0') {
-                cmd[i] = user_home;
-            } else {
-                char* username = &cmd[i][1];
-                char* new_cmd = malloc(BUF_SIZE * sizeof(char));
-                struct passwd* pw = getpwnam(username);
-                if (pw != NULL) {
-                    strcpy(new_cmd, pw->pw_dir);
-                    strcat(new_cmd, &cmd[i][strlen(username) + 1]);
-                    cmd[i] = new_cmd;
-                } else {
-                    strcpy(new_cmd, home);
-                    strcat(new_cmd, &cmd[i][1]);
-                    cmd[i] = new_cmd;
-                }
-            }
-        }
+char* tilde_expansion(char* cmd) {
+    struct passwd *pw;
+    char* username = cmd + 1; 
+    char* slash = strchr(username, '/');
+
+    if (slash != NULL) {
+        *slash = '\0';
     }
 
-    return cmd;
+    if (*username == '\0') {
+        pw = getpwuid(getuid()); 
+    } else {
+        pw = getpwnam(username); 
+    }
+
+    if (slash != NULL) {
+        *slash = '/';
+    }
+
+    if (pw != NULL) {
+        char* expanded_path = malloc(BUF_SIZE);
+        snprintf(expanded_path, BUF_SIZE, "%s%s", pw->pw_dir, slash ? slash : "");
+        return expanded_path;
+    } else {
+        return strdup(cmd);
+    }
 }
 
 char** splitCmd(char* user_input)
@@ -72,19 +68,36 @@ char** splitCmd(char* user_input)
     for (int i = 0; i < BUF_SIZE; i++) {
         c = &user_input[i];
         if (*c == '\0' || *c == '\n') {
-            cmd[j] = strndup(word, BUF_SIZE);
+            if (strlen(word) > 0) {
+                if (word[0] == '~') {
+                    char* expanded_path = tilde_expansion(word);
+                    cmd[j] = strndup(expanded_path, BUF_SIZE);
+                    free(expanded_path);
+                } else {
+                    cmd[j] = strndup(word, BUF_SIZE);
+                }
+                memset(word, 0, BUF_SIZE);
+                j++;
+            }
             break;
         } else if (isspace(*c)) {
-            cmd[j] = strndup(word, BUF_SIZE);
-            memset(word, 0, 256);
-            j++;
+            if (strlen(word) > 0) {
+                if (word[0] == '~') {
+                    char* expanded_path = tilde_expansion(word);
+                    cmd[j] = strndup(expanded_path, BUF_SIZE);
+                    free(expanded_path);
+                } else {
+                    cmd[j] = strndup(word, BUF_SIZE);
+                }
+                memset(word, 0, BUF_SIZE);
+                j++;
+            }
         } else {
             strncat(word, c, 1);
         }
     }
 
-    cmd = tildeExpansion(cmd);
-
+    cmd[j] = NULL;
     return cmd;
 }
 
