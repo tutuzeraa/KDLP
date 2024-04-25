@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define BUF_SIZE 256
 const int num_builtins = 3;
@@ -28,7 +29,7 @@ int (*builtin_func[])(char**) = {
     &osh_exit,
 };
 
-#include <pwd.h>
+int redirection(char** cmd);
 
 char* tilde_expansion(char* cmd) {
     struct passwd *pw;
@@ -98,6 +99,7 @@ char** splitCmd(char* user_input)
     }
 
     cmd[j] = NULL;
+
     return cmd;
 }
 
@@ -213,6 +215,12 @@ int execute(char** cmd)
         }
     }
 
+    for (int i = 0; cmd[i] != NULL; i++) {
+        if (cmd[i][0] == '<' || cmd[i][0] == '>') {
+            return redirection(cmd);
+        }
+    }
+
     if (cmd[0][0] == '/' || cmd[0][0] == '.') {
         return osh_exec_child(cmd);
     } else {
@@ -221,6 +229,43 @@ int execute(char** cmd)
 
     return 1;
 }
+
+
+int redirection(char** cmd)
+{
+    int i = 0;
+    char* file;
+    char** new_cmd = malloc(BUF_SIZE * sizeof(char*));
+
+    while (cmd[i] != NULL) {
+        if (cmd[i][0] == '<' || cmd[i][0] == '>') {
+            if (cmd[i + 1] == NULL) {
+                perror("no file for redirection\n");
+                return 1;
+            }
+            file = cmd[i + 1];
+            break;
+        }
+        new_cmd[i] = strndup(cmd[i], BUF_SIZE);
+        i++;
+    }
+
+    new_cmd[i] = NULL;
+
+    int fd;
+    if (cmd[i][0] == '<') {
+        fd = open(file, O_RDONLY);
+        dup2(fd, STDIN_FILENO);
+    } else {
+        fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        dup2(fd, STDOUT_FILENO);
+    }
+
+    close(fd);
+    return execute(new_cmd);
+
+}
+
 
 int main(int argc, char** argv)
 {
